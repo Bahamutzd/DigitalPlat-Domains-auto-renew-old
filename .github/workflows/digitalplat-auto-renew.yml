@@ -30,6 +30,7 @@ jobs:
           DIGITALPLAT_RENEW_BEFORE_DAYS: ${{ vars.DIGITALPLAT_RENEW_BEFORE_DAYS }}
           DIGITALPLAT_RENEWAL_TYPE: ${{ vars.DIGITALPLAT_RENEWAL_TYPE }}
           DIGITALPLAT_RENEWAL_YEARS: ${{ vars.DIGITALPLAT_RENEWAL_YEARS }}
+          DIGITALPLAT_USER_AGENT: ${{ vars.DIGITALPLAT_USER_AGENT }}
         run: |
           python scripts/digitalplat_auto_renew.py --state state/domains-state.json
 

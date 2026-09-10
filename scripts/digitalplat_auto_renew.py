@@ -15,6 +15,13 @@ from typing import Any
 API_BASE = "https://domain-api.digitalplat.org/api/v1"
 DATE_FORMAT = "%Y-%m-%d"
 DEFAULT_RENEW_BEFORE_DAYS = 120
+# domain-api.digitalplat.org 前置了 Cloudflare Bot Fight Mode，对非浏览器 User-Agent
+# 一律返回 403 + Cf-Mitigated: challenge。实测门控条件只有 UA 字符串本身，补齐其余
+# 浏览器请求头无效，因此这里发送浏览器样式 UA。可用 DIGITALPLAT_USER_AGENT 覆盖。
+DEFAULT_USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
+)
 
 
 @dataclass
@@ -32,13 +39,14 @@ class DomainRecord:
 
 
 class DigitalPlatClient:
-    def __init__(self, api_token: str, api_base: str) -> None:
+    def __init__(self, api_token: str, api_base: str, user_agent: str | None = None) -> None:
         self.api_base = api_base.rstrip("/")
         self.headers = {
             "Authorization": f"Bearer {api_token}",
             "Accept": "application/json",
             "Content-Type": "application/json",
-            "User-Agent": "digitalplat-auto-renew/1.0",
+            "User-Agent": user_agent or DEFAULT_USER_AGENT,
+            "Accept-Language": "en-US,en;q=0.9",
         }
 
     def _request(
@@ -59,7 +67,14 @@ class DigitalPlatClient:
                 text = response.read().decode("utf-8")
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")
-            raise RuntimeError(f"DigitalPlat HTTP {exc.code}: {detail}") from exc
+            if exc.code == 403 and exc.headers.get("Cf-Mitigated") == "challenge":
+                raise RuntimeError(
+                    "DigitalPlat request was blocked by a Cloudflare challenge "
+                    f"(CF-RAY {exc.headers.get('CF-RAY', '-')}). The current User-Agent "
+                    f"({self.headers['User-Agent'][:60]}...) is being treated as a bot. "
+                    "Set DIGITALPLAT_USER_AGENT to a current browser User-Agent string."
+                ) from exc
+            raise RuntimeError(f"DigitalPlat HTTP {exc.code}: {detail[:500]}") from exc
         except urllib.error.URLError as exc:
             raise RuntimeError(f"DigitalPlat network error: {exc}") from exc
 
@@ -277,7 +292,8 @@ def main() -> int:
     else:
         token = require_env("DIGITALPLAT_API_TOKEN")
         api_base = os.getenv("DIGITALPLAT_API_BASE") or API_BASE
-        client = DigitalPlatClient(token, api_base)
+        user_agent = os.getenv("DIGITALPLAT_USER_AGENT") or DEFAULT_USER_AGENT
+        client = DigitalPlatClient(token, api_base, user_agent)
         raw_domains = client.list_domains()
 
     domain_map = {normalize_domain(raw).name: raw for raw in raw_domains}

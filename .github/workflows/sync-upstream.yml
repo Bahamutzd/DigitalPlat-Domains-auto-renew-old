@@ -40,10 +40,13 @@ jobs:
             || git remote set-url upstream https://github.com/OUBIGFA/DigitalPlat-Domains-auto-renew.git
           git fetch upstream main --depth=1
 
+      # scripts/ 与 digitalplat-auto-renew.yml 不再自动同步：本仓库在其中修复了
+      # Cloudflare Bot Fight Mode 的 User-Agent 拦截（上游尚未修复，同步会导致回退）。
+      # 上游修好后可手动 workflow_dispatch 并把这两项加回下面两行。
       - name: Replace local template files with upstream versions
         if: steps.guard.outputs.skip != 'true'
         run: |
-          git checkout upstream/main -- scripts/ README.md .github/workflows/digitalplat-auto-renew.yml
+          git checkout upstream/main -- README.md
 
       - name: Commit and push if changed
         if: steps.guard.outputs.skip != 'true'
@@ -52,6 +55,6 @@ jobs:
             echo "Template files already match upstream, nothing to commit."
             exit 0
           fi
-          git add scripts/ README.md .github/workflows/digitalplat-auto-renew.yml
+          git add README.md
           git commit -m "chore(template): sync upstream from OUBIGFA/DigitalPlat-Domains-auto-renew [auto]"
           git push
